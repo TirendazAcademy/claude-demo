@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hafıza Kartı Oyunu</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #1a1a2e;
+      font-family: 'Segoe UI', sans-serif;
+      color: #eee;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      margin-bottom: 16px;
+      letter-spacing: 1px;
+      color: #e0c3fc;
+    }
+
+    .stats {
+      display: flex;
+      gap: 32px;
+      margin-bottom: 20px;
+      font-size: 1rem;
+    }
+
+    .stat {
+      background: #16213e;
+      padding: 8px 20px;
+      border-radius: 20px;
+      border: 1px solid #2d2d5e;
+    }
+
+    .stat span {
+      font-weight: bold;
+      color: #e0c3fc;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 90px);
+      grid-template-rows: repeat(4, 90px);
+      gap: 12px;
+    }
+
+    .card {
+      width: 90px;
+      height: 90px;
+      perspective: 600px;
+      cursor: pointer;
+    }
+
+    .card-inner {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .card.flipped .card-inner,
+    .card.matched .card-inner {
+      transform: rotateY(180deg);
+    }
+
+    .card-front,
+    .card-back {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 14px;
+      backface-visibility: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .card-front {
+      background: linear-gradient(135deg, #16213e, #0f3460);
+      border: 2px solid #2d2d5e;
+      font-size: 2rem;
+      color: #3a3a6e;
+      user-select: none;
+    }
+
+    .card-front::after {
+      content: '?';
+      font-size: 2rem;
+      color: #4a4a8e;
+    }
+
+    .card-back {
+      background: linear-gradient(135deg, #2d1b69, #4a1b8c);
+      border: 2px solid #7c3aed;
+      font-size: 2.6rem;
+      transform: rotateY(180deg);
+    }
+
+    .card.matched .card-back {
+      background: linear-gradient(135deg, #065f46, #047857);
+      border-color: #34d399;
+      box-shadow: 0 0 14px rgba(52, 211, 153, 0.4);
+    }
+
+    .card:not(.flipped):not(.matched):hover .card-inner {
+      transform: rotateY(10deg) scale(1.05);
+    }
+
+    /* Overlay */
+    .overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.75);
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
+
+    .overlay.show { display: flex; }
+
+    .modal {
+      background: #16213e;
+      border: 2px solid #7c3aed;
+      border-radius: 24px;
+      padding: 40px 48px;
+      text-align: center;
+      animation: popIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    @keyframes popIn {
+      from { transform: scale(0.7); opacity: 0; }
+      to   { transform: scale(1);   opacity: 1; }
+    }
+
+    .modal h2 { font-size: 2rem; color: #e0c3fc; margin-bottom: 12px; }
+    .modal p  { color: #aaa; margin-bottom: 8px; font-size: 1.05rem; }
+    .modal .result { color: #e0c3fc; font-weight: bold; font-size: 1.15rem; }
+
+    button {
+      margin-top: 24px;
+      padding: 12px 36px;
+      font-size: 1rem;
+      background: #7c3aed;
+      color: #fff;
+      border: none;
+      border-radius: 30px;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    button:hover  { background: #6d28d9; transform: scale(1.04); }
+    button:active { transform: scale(0.97); }
+  </style>
+</head>
+<body>
+
+  <h1>Hafıza Kartı</h1>
+
+  <div class="stats">
+    <div class="stat">Hamle: <span id="moves">0</span></div>
+    <div class="stat">Süre: <span id="timer">0:00</span></div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <h2>Tebrikler! 🎉</h2>
+      <p>Tüm kartları eşleştirdin!</p>
+      <p class="result" id="result"></p>
+      <button onclick="startGame()">Tekrar Oyna</button>
+    </div>
+  </div>
+
+  <script>
+    const EMOJIS = ['🐶','🐱','🦊','🐼','🐨','🦁','🐸','🦋'];
+    let cards = [], flipped = [], matched = 0, moves = 0;
+    let timerInterval = null, seconds = 0, locked = false;
+
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    function formatTime(s) {
+      return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    }
+
+    function startTimer() {
+      clearInterval(timerInterval);
+      seconds = 0;
+      document.getElementById('timer').textContent = '0:00';
+      timerInterval = setInterval(() => {
+        seconds++;
+        document.getElementById('timer').textContent = formatTime(seconds);
+      }, 1000);
+    }
+
+    function startGame() {
+      document.getElementById('overlay').classList.remove('show');
+      moves = 0;
+      matched = 0;
+      flipped = [];
+      locked = false;
+      document.getElementById('moves').textContent = '0';
+
+      cards = shuffle([...EMOJIS, ...EMOJIS]);
+
+      const grid = document.getElementById('grid');
+      grid.innerHTML = '';
+
+      cards.forEach((emoji, i) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.dataset.index = i;
+        card.dataset.emoji = emoji;
+        card.innerHTML = `
+          <div class="card-inner">
+            <div class="card-front"></div>
+            <div class="card-back">${emoji}</div>
+          </div>`;
+        card.addEventListener('click', onCardClick);
+        grid.appendChild(card);
+      });
+
+      startTimer();
+    }
+
+    function onCardClick(e) {
+      const card = e.currentTarget;
+      if (locked) return;
+      if (card.classList.contains('flipped') || card.classList.contains('matched')) return;
+
+      card.classList.add('flipped');
+      flipped.push(card);
+
+      if (flipped.length === 2) {
+        locked = true;
+        moves++;
+        document.getElementById('moves').textContent = moves;
+        checkMatch();
+      }
+    }
+
+    function checkMatch() {
+      const [a, b] = flipped;
+      if (a.dataset.emoji === b.dataset.emoji) {
+        setTimeout(() => {
+          a.classList.remove('flipped'); a.classList.add('matched');
+          b.classList.remove('flipped'); b.classList.add('matched');
+          flipped = [];
+          locked = false;
+          matched++;
+          if (matched === EMOJIS.length) endGame();
+        }, 400);
+      } else {
+        setTimeout(() => {
+          a.classList.remove('flipped');
+          b.classList.remove('flipped');
+          flipped = [];
+          locked = false;
+        }, 900);
+      }
+    }
+
+    function endGame() {
+      clearInterval(timerInterval);
+      document.getElementById('result').textContent =
+        `${moves} hamlede, ${formatTime(seconds)} sürede tamamladın.`;
+      setTimeout(() => document.getElementById('overlay').classList.add('show'), 300);
+    }
+
+    startGame();
+  </script>
+</body>
+</html>
