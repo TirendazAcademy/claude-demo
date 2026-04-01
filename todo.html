@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Todo List</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f5f5;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 60px 16px;
+      color: #333;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 520px;
+    }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 24px;
+      color: #111;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .input-row input {
+      flex: 1;
+      padding: 12px 16px;
+      border: 1.5px solid #ddd;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      outline: none;
+      background: #fff;
+      transition: border-color 0.15s;
+    }
+
+    .input-row input:focus { border-color: #555; }
+
+    .input-row button {
+      padding: 12px 20px;
+      background: #111;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+
+    .input-row button:hover { background: #333; }
+
+    .filters {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 16px;
+    }
+
+    .filters button {
+      padding: 6px 14px;
+      border: 1.5px solid transparent;
+      border-radius: 20px;
+      background: none;
+      font-size: 0.85rem;
+      cursor: pointer;
+      color: #666;
+      transition: all 0.15s;
+    }
+
+    .filters button:hover { color: #111; }
+
+    .filters button.active {
+      border-color: #111;
+      color: #111;
+      font-weight: 600;
+    }
+
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #fff;
+      border: 1.5px solid #eee;
+      border-radius: 10px;
+      padding: 14px 16px;
+      transition: opacity 0.15s;
+    }
+
+    .item.done { opacity: 0.5; }
+
+    .item input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: #111;
+      flex-shrink: 0;
+    }
+
+    .item span {
+      flex: 1;
+      font-size: 0.95rem;
+      line-height: 1.4;
+    }
+
+    .item.done span { text-decoration: line-through; }
+
+    .item button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #bbb;
+      font-size: 1.1rem;
+      padding: 2px 4px;
+      border-radius: 4px;
+      line-height: 1;
+      transition: color 0.15s;
+      flex-shrink: 0;
+    }
+
+    .item button:hover { color: #e55; }
+
+    .footer {
+      margin-top: 16px;
+      font-size: 0.82rem;
+      color: #aaa;
+      text-align: center;
+    }
+
+    .empty {
+      text-align: center;
+      color: #bbb;
+      font-size: 0.9rem;
+      padding: 32px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>Yapılacaklar</h1>
+
+    <div class="input-row">
+      <input type="text" id="taskInput" placeholder="Yeni görev ekle..." />
+      <button onclick="addTask()">Ekle</button>
+    </div>
+
+    <div class="filters">
+      <button class="active" onclick="setFilter('all', this)">Tümü</button>
+      <button onclick="setFilter('active', this)">Aktif</button>
+      <button onclick="setFilter('done', this)">Tamamlanan</button>
+    </div>
+
+    <div class="list" id="list"></div>
+    <div class="footer" id="footer"></div>
+  </div>
+
+  <script>
+    let tasks = JSON.parse(localStorage.getItem('tasks') || '[]');
+    let filter = 'all';
+
+    function save() {
+      localStorage.setItem('tasks', JSON.stringify(tasks));
+    }
+
+    function render() {
+      const list = document.getElementById('list');
+      const footer = document.getElementById('footer');
+
+      const visible = tasks.filter(t =>
+        filter === 'all' ? true :
+        filter === 'active' ? !t.done :
+        t.done
+      );
+
+      if (visible.length === 0) {
+        list.innerHTML = '<div class="empty">Görev yok</div>';
+      } else {
+        list.innerHTML = visible.map(t => `
+          <div class="item ${t.done ? 'done' : ''}">
+            <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggle(${t.id})" />
+            <span>${escape(t.text)}</span>
+            <button onclick="remove(${t.id})" title="Sil">&#x2715;</button>
+          </div>
+        `).join('');
+      }
+
+      const remaining = tasks.filter(t => !t.done).length;
+      footer.textContent = remaining === 0
+        ? 'Tüm görevler tamamlandı'
+        : `${remaining} görev kaldı`;
+    }
+
+    function escape(str) {
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function addTask() {
+      const input = document.getElementById('taskInput');
+      const text = input.value.trim();
+      if (!text) return;
+      tasks.push({ id: Date.now(), text, done: false });
+      input.value = '';
+      save();
+      render();
+    }
+
+    function toggle(id) {
+      const t = tasks.find(t => t.id === id);
+      if (t) t.done = !t.done;
+      save();
+      render();
+    }
+
+    function remove(id) {
+      tasks = tasks.filter(t => t.id !== id);
+      save();
+      render();
+    }
+
+    function setFilter(f, btn) {
+      filter = f;
+      document.querySelectorAll('.filters button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      render();
+    }
+
+    document.getElementById('taskInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') addTask();
+    });
+
+    render();
+  </script>
+</body>
+</html>
